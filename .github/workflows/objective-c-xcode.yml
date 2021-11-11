@@ -19,10 +19,12 @@ jobs:
           xcodebuild -project iTerm2.xcodeproj -scheme iTerm2 CODE_SIGNING_ALLOWED=NO
           
       - name: compress
+        if: always()
         run: |
           zip -r iTerm2.zip /Users/runner/Library/Developer/Xcode/DerivedData
           
       - name: Upload MacVim image
+        if: always()
         uses: actions/upload-artifact@v2
         with:
           name: iTerm2.zip
