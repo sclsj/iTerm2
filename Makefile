@@ -26,24 +26,24 @@ install: | Deployment backup-old-iterm
 
 Development:
 	echo "Using PATH for build: $(PATH)"
-	xcodebuild -parallelizeTargets -target iTerm2 -configuration Development && \
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Development CODE_SIGNING_ALLOWED=NO && \
 	chmod -R go+rX build/Development
 
 Dep:
-	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment CODE_SIGNING_ALLOWED=NO
 
 Beta:
 	cp plists/beta-iTerm2.plist plists/iTerm2.plist
-	xcodebuild -parallelizeTargets -target iTerm2 -configuration Beta && \
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Beta CODE_SIGNING_ALLOWED=NO && \
 	chmod -R go+rX build/Beta
 
 Deployment:
-	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment && \
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment CODE_SIGNING_ALLOWED=NO && \
 	chmod -R go+rX build/Deployment
 
 Nightly: force
 	cp plists/nightly-iTerm2.plist plists/iTerm2.plist
-	xcodebuild -parallelizeTargets -target iTerm2 -configuration Nightly && git checkout -- plists/iTerm2.plist
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Nightly CODE_SIGNING_ALLOWED=NO && git checkout -- plists/iTerm2.plist
 	chmod -R go+rX build/Nightly
 
 run: Development
@@ -87,7 +87,7 @@ preview:
 
 x86libsixel: force
 	cd submodules/libsixel && make clean
-	cd submodules/libsixel && CFLAGS="-target x86_64-apple-macos10.14" ./configure --prefix=${PWD}/ThirdParty/libsixel --without-libcurl --without-jpeg --without-png --disable-python && make && make install
+	cd submodules/libsixel && CFLAGS="-target x86_64-apple-macos10.13 -mmacosx-version-min=10.13" ./configure --prefix=${PWD}/ThirdParty/libsixel --without-libcurl --without-jpeg --without-png --disable-python && make && make install
 	rm ThirdParty/libsixel/lib/*dylib* ThirdParty/libsixel/bin/*
 	mv ThirdParty/libsixel/lib/libsixel.a ThirdParty/libsixel/lib/libsixel-x86.a
 
@@ -98,6 +98,7 @@ armsixel: force
 
 # Usage: go to an intel mac and run make x86libsixel and commit it. Go to an arm mac and run make armsixel && make libsixel.
 fatlibsixel: force
+	export CFLAGS="-mmacosx-version-min=10.13"
 	make armsixel
 	make x86libsixel
 	lipo -create -output ThirdParty/libsixel/lib/libsixel.a ThirdParty/libsixel-arm/lib/libsixel.a ThirdParty/libsixel/lib/libsixel-x86.a
@@ -106,15 +107,17 @@ armopenssl: force
 	cd submodules/openssl && ./Configure darwin64-arm64-cc && make clean && make build_generated && make libcrypto.a libssl.a -j4 && mv libcrypto.a libcrypto-arm64.a && mv libssl.a libssl-arm64.a
 
 x86openssl: force
-	cd submodules/openssl && ./Configure darwin64-x86_64-cc && make clean && make build_generated && make libcrypto.a libssl.a -j4 && mv libcrypto.a libcrypto-x86_64.a && mv libssl.a libssl-x86_64.a
+	cd submodules/openssl && export CFLAGS="-mmacosx-version-min=10.13" && ./Configure darwin64-x86_64-cc && make clean && make build_generated && make libcrypto.a libssl.a -j4 && mv libcrypto.a libcrypto-x86_64.a && mv libssl.a libssl-x86_64.a
 
 fatopenssl: force
+	export CFLAGS="-mmacosx-version-min=10.13"
 	make x86openssl
 	make armopenssl
 	cd submodules/openssl/ && lipo -create -output libcrypto.a libcrypto-x86_64.a libcrypto-arm64.a
 	cd submodules/openssl/ && lipo -create -output libssl.a libssl-x86_64.a libssl-arm64.a
 
 x86libssh2: force
+	export CFLAGS="-mmacosx-version-min=10.13"
 	mkdir -p submodules/libssh2/build_x86_64
 	cd submodules/libssh2/build_x86_64 && /usr/local/bin/cmake -DOPENSSL_ROOT_DIR=${PWD}/submodules/openssl -DBUILD_EXAMPLES=NO -DBUILD_TESTING=NO -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCRYPTO_BACKEND=OpenSSL .. && make libssh2 -j4
 
@@ -123,6 +126,7 @@ armlibssh2: force
 	cd submodules/libssh2/build_arm64 && /usr/local/bin/cmake -DOPENSSL_ROOT_DIR=${PWD}/submodules/openssl -DBUILD_EXAMPLES=NO -DBUILD_TESTING=NO -DCMAKE_OSX_ARCHITECTURES=arm64 -DCRYPTO_BACKEND=OpenSSL .. && make libssh2 -j4
 
 fatlibssh2: force fatopenssl
+	export CFLAGS="-mmacosx-version-min=10.13"
 	make x86libssh2
 	make armlibssh2
 	cd submodules/libssh2 && lipo -create -output libssh2.a build_arm64/src/libssh2.a build_x86_64/src/libssh2.a
@@ -130,18 +134,22 @@ fatlibssh2: force fatopenssl
 	cp submodules/openssl/libcrypto.a submodules/openssl/libssl.a submodules/NMSSH/NMSSH-OSX/Libraries/lib/
 
 CoreParse: force
+	export CFLAGS="-mmacosx-version-min=10.13"
 	rm -rf ThirdParty/CoreParse.framework
-	cd submodules/CoreParse && xcodebuild -target CoreParse -configuration Release CONFIGURATION_BUILD_DIR=../../ThirdParty
+	cd submodules/CoreParse && xcodebuild -target CoreParse -configuration Release CONFIGURATION_BUILD_DIR=../../ThirdParty CODE_SIGNING_ALLOWED=NO
 
 NMSSH: force fatlibssh2
+	export CFLAGS="-mmacosx-version-min=10.13"
 	rm -rf ThirdParty/NMSSH.framework
 	cd submodules/NMSSH && xcodebuild -target NMSSH -project NMSSH.xcodeproj -configuration Release CONFIGURATION_BUILD_DIR=../../ThirdParty
 
 libgit2: force
+	export CFLAGS="-mmacosx-version-min=10.13"
 	mkdir -p submodules/libgit2/build
 	MAKE=/usr/local/bin/cmake PATH=/usr/local/bin:${PATH} cd submodules/libgit2/build && ${CMAKE} -DBUILD_SHARED_LIBS=OFF -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_OSX_DEPLOYMENT_TARGET="10.14" -DCMAKE_INSTALL_PREFIX=../../../ThirdParty/libgit2 .. && ${CMAKE} -j22 --build . && ${CMAKE} --build . -j22 --target install
 
 deps: force
+	export CFLAGS="-mmacosx-version-min=10.13"
 	make fatlibsixel
 	make fatopenssl
 	make fatlibssh2
