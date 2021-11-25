@@ -15,15 +15,14 @@ jobs:
 
       - name: Build
         run: |
-          export CFLAGS="-mmacosx-version-min=10.13"
-          xcodebuild -project iTerm2.xcodeproj -scheme iTerm2 CODE_SIGNING_ALLOWED=NO
-          
+          make
+
       - name: compress
         if: always()
         run: |
           zip -r iTerm2.zip /Users/runner/Library/Developer/Xcode/DerivedData
           
-      - name: Upload MacVim image
+      - name: Upload image
         if: always()
         uses: actions/upload-artifact@v2
         with:
