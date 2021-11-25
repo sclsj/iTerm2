@@ -264,7 +264,9 @@ NSString *const kProfilePreferenceInitialDirectoryAdvancedValue = @"Advanced";
                              KEY_RIGHT_OPTION_KEY_SENDS, KEY_APPLICATION_KEYPAD_ALLOWED, KEY_ALLOW_MODIFY_OTHER_KEYS,
                              KEY_LEFT_OPTION_KEY_CHANGEABLE, KEY_RIGHT_OPTION_KEY_CHANGEABLE,
                              KEY_PLACE_PROMPT_AT_FIRST_COLUMN, KEY_SHOW_MARK_INDICATORS,
-                             KEY_POWERLINE, KEY_TRIGGERS_USE_INTERPOLATED_STRINGS, KEY_ENABLE_TRIGGERS_IN_INTERACTIVE_APPS,
+                             KEY_POWERLINE, KEY_TRIGGERS_USE_INTERPOLATED_STRINGS,
+                             KEY_ENABLE_TRIGGERS_IN_INTERACTIVE_APPS,
+                             KEY_SMART_SELECTION_ACTIONS_USE_INTERPOLATED_STRINGS,
                              KEY_COLUMNS, KEY_ROWS, KEY_ICON, KEY_AUTOLOG, KEY_LOGGING_STYLE, KEY_HAS_HOTKEY,
                              KEY_HIDE_AFTER_OPENING, KEY_HOTKEY_MODIFIER_FLAGS, KEY_HOTKEY_KEY_CODE,
                              KEY_HOTKEY_AUTOHIDE, KEY_HOTKEY_REOPEN_ON_ACTIVATION, KEY_HOTKEY_ANIMATE,
@@ -584,6 +586,7 @@ NSString *const kProfilePreferenceInitialDirectoryAdvancedValue = @"Advanced";
                   KEY_STATUS_BAR_LAYOUT: @{},
                   KEY_TRIGGERS_USE_INTERPOLATED_STRINGS: @NO,
                   KEY_ENABLE_TRIGGERS_IN_INTERACTIVE_APPS: @YES,
+                  KEY_SMART_SELECTION_ACTIONS_USE_INTERPOLATED_STRINGS: @NO,
                   KEY_AWDS_TAB_OPTION: kProfilePreferenceInitialDirectoryHomeValue,
                   KEY_AWDS_PANE_OPTION: kProfilePreferenceInitialDirectoryHomeValue,
                   KEY_AWDS_WIN_OPTION: kProfilePreferenceInitialDirectoryHomeValue,
@@ -809,14 +812,9 @@ NSString *const kProfilePreferenceInitialDirectoryAdvancedValue = @"Advanced";
         return value;
     }
 
-    if (@available(macOS 10.13, *)) {
-        // macOS 10.13 has switched to unicode 9 widths. If you're sshing somewhere then you're
-        // going to have a bad time. My hope is that this makes people happier on balance.
-        return @9;
-    } else {
-        // Fall back to the default from the dictionary.
-        return [self defaultObjectForKey:key];
-    }
+    // macOS 10.13 has switched to unicode 9 widths. If you're sshing somewhere then you're
+    // going to have a bad time. My hope is that this makes people happier on balance.
+    return @9;
 }
 
 + (id)backgroundImageMode:(Profile *)profile {

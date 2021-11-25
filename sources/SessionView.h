@@ -145,6 +145,7 @@ extern NSString *const SessionViewWasSelectedForInspectionNotification;
 - (CGFloat)sessionViewTransparencyAlpha;
 - (NSRect)sessionViewFrameForLegacyView;
 - (void)sessionViewDidChangeEffectiveAppearance;
+- (BOOL)sessionViewCaresAboutMouseMovement;
 
 @end
 
@@ -274,5 +275,9 @@ typedef NS_ENUM(NSUInteger, iTermSessionViewFindDriver) {
 - (void)showUnobtrusiveMessage:(NSString *)message;
 - (void)setSuppressLegacyDrawing:(BOOL)suppressLegacyDrawing;
 - (void)takeFindDriverFrom:(SessionView *)donorView delegate:(id<iTermFindDriverDelegate>)delegate;
+
+// Sets the next responder for the dropdown find view controller so you can still use menu items
+// vended by PTYTextView when it is focused.
+- (void)setMainResponder:(NSResponder *)responder;
 
 @end

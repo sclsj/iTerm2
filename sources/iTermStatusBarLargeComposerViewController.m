@@ -14,6 +14,7 @@
 #import "NSResponder+iTerm.h"
 #import "NSStringITerm.h"
 #import "NSView+iTerm.h"
+#import "PasteboardHistory.h"
 #import "SolidColorView.h"
 #import "VT100RemoteHost.h"
 #import "WindowControllerInterface.h"
@@ -204,15 +205,9 @@ static NSRange iTermRangeMinus(NSRange lhs, NSRange rhs) {
 }
 
 - (NSView *)newBackgroundViewWithFrame:(NSRect)frame {
-    if (@available(macOS 10.14, *)) {
-        NSVisualEffectView *myView = [[NSVisualEffectView alloc] initWithFrame:frame];
-        myView.appearance = self.appearance;
-        return myView;
-    }
-
-    SolidColorView *solidColorView = [[SolidColorView alloc] initWithFrame:frame
-                                                                     color:[NSColor controlBackgroundColor]];
-    return solidColorView;
+    NSVisualEffectView *myView = [[NSVisualEffectView alloc] initWithFrame:frame];
+    myView.appearance = self.appearance;
+    return myView;
 }
 
 - (void )viewDidMoveToWindow {
@@ -271,6 +266,14 @@ static NSRange iTermRangeMinus(NSRange lhs, NSRange rhs) {
         cache = [NSMutableDictionary dictionary];
     });
     return cache;
+}
+
+- (IBAction)pasteOptions:(id)sender {
+    NSString *content = self.textView.string;
+    if (!content) {
+        return;
+    }
+    [self.textView.composerDelegate composerTextViewSendToAdvancedPaste:content];
 }
 
 - (void)setShell:(NSString *)shell {

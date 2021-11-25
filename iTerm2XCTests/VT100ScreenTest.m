@@ -1009,6 +1009,29 @@ NSLog(@"Known bug: %s should be true, but %s is.", #expressionThatShouldBeTrue, 
 - (void)screenResetColorsWithColorMapKey:(int)key {
 }
 
+- (BOOL)screenCursorIsBlinking {
+    return NO;
+}
+
+
+- (int)screenMaximumTheoreticalImageDimension {
+    return 4096;
+}
+
+
+- (void)screenRestoreColorsFromSlot:(VT100SavedColorsSlot *)slot {
+}
+
+
+- (VT100SavedColorsSlot *)screenSavedColorsSlot {
+    return nil;
+}
+
+
+- (void)screenSetSubtitle:(NSString *)subtitle {
+}
+
+
 
 #pragma mark - iTermSelectionDelegate
 
@@ -2091,18 +2114,14 @@ NSLog(@"Known bug: %s should be true, but %s is.", #expressionThatShouldBeTrue, 
     XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"Ｅ"]);
     XCTAssert(line[i++].code == DWC_RIGHT);
     XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"�"]);  // note that u+200b is not present
-    if (@available(macOS 10.13, *)) {
-        XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"\u200c\u200d"]);  // Funny way macoS 10.13 works
-    }
+    XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"\u200c\u200d"]);  // Funny way macoS 10.13 works
     XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"g"]);
     XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"ł"]);
 
     XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"🖕🏾"]);
     BOOL lettersHaveSkin = NO;
-    if (@available(macOS 10.14, *)) {
-        if (@available(macOS 10.15, *)) { } else {
-            lettersHaveSkin = YES;
-        }
+    if (@available(macOS 10.15, *)) { } else {
+        lettersHaveSkin = YES;
     }
     if (lettersHaveSkin) {
         XCTAssert([ScreenCharToStr(line + i++) isEqualToString:@"g\U0001F3FE"]);  // macOS 10.14 does a silly thing
@@ -3480,7 +3499,7 @@ NSLog(@"Known bug: %s should be true, but %s is.", #expressionThatShouldBeTrue, 
     isFullscreen_ = NO;
     VT100Screen *screen = [self screenWithWidth:10 height:4];
     screen.delegate = (id<VT100ScreenDelegate>)self;
-    [screen terminalSetWidth:6];
+    [screen terminalSetWidth:6 preserveScreen:YES];
     XCTAssert(newSize_.width == 6);
     XCTAssert(newSize_.height == 4);
 
@@ -3488,7 +3507,7 @@ NSLog(@"Known bug: %s should be true, but %s is.", #expressionThatShouldBeTrue, 
     canResize_ = NO;
     screen = [self screenWithWidth:10 height:4];
     screen.delegate = (id<VT100ScreenDelegate>)self;
-    [screen terminalSetWidth:6];
+    [screen terminalSetWidth:6 preserveScreen:YES];
     XCTAssert(newSize_.width == 0);
     XCTAssert(newSize_.height == 0);
 
@@ -3497,7 +3516,7 @@ NSLog(@"Known bug: %s should be true, but %s is.", #expressionThatShouldBeTrue, 
     isFullscreen_ = YES;
     screen = [self screenWithWidth:10 height:4];
     screen.delegate = (id<VT100ScreenDelegate>)self;
-    [screen terminalSetWidth:6];
+    [screen terminalSetWidth:6 preserveScreen:YES];
     XCTAssert(newSize_.width == 0);
     XCTAssert(newSize_.height == 0);
 }
@@ -4635,8 +4654,8 @@ NSLog(@"Known bug: %s should be true, but %s is.", #expressionThatShouldBeTrue, 
     continuation.code = EOL_HARD;
     [lineBuffer appendLine:line length:n partial:NO width:80 metadata:iTermMetadataDefault() continuation:continuation];
 
-    iTermExternalAttribute *red = [[[iTermExternalAttribute alloc] initWithUnderlineColor:(VT100TerminalColorValue){ .red=1, .green=2, .blue=3, .mode=ColorModeNormal}] autorelease];
-    iTermExternalAttribute *magenta = [[[iTermExternalAttribute alloc] initWithUnderlineColor:(VT100TerminalColorValue){ .red=5, .green=6, .blue=7, .mode=ColorModeNormal}] autorelease];
+    iTermExternalAttribute *red = [[[iTermExternalAttribute alloc] initWithUnderlineColor:(VT100TerminalColorValue){ .red=1, .green=2, .blue=3, .mode=ColorModeNormal} urlCode:0] autorelease];
+    iTermExternalAttribute *magenta = [[[iTermExternalAttribute alloc] initWithUnderlineColor:(VT100TerminalColorValue){ .red=5, .green=6, .blue=7, .mode=ColorModeNormal} urlCode:0] autorelease];
 
     // Append a line of 5 'x' with underline color and no newline at the end
     {

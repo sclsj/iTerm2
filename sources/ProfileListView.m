@@ -30,6 +30,7 @@
 #import "NSArray+iTerm.h"
 #import "NSMutableAttributedString+iTerm.h"
 #import "NSObject+iTerm.h"
+#import "NSTableView+iTerm.h"
 #import "NSTextField+iTerm.h"
 #import "PTYSession.h"
 #import "ProfileModel.h"
@@ -58,32 +59,14 @@ static NSString *const iTermProfileListViewRestorableStateTagsFraction = @"iTerm
 @implementation iTermProfileListViewTextField
 
 - (void)setBackgroundStyle:(NSBackgroundStyle)backgroundStyle {
-    if (@available(macOS 10.14, *)) {
-        switch (backgroundStyle) {
-            case NSBackgroundStyleNormal:
-                self.textColor = [NSColor labelColor];
-                [self setAttributedTextColorsForKey:iTermRegularForegroundColor];
-                break;
-            case NSBackgroundStyleEmphasized:
-                [self setAttributedTextColorsForKey:iTermSelectedActiveForegroundColor];
-                self.textColor = [NSColor labelColor];
-                break;
-                
-            case NSBackgroundStyleRaised:
-            case NSBackgroundStyleLowered:
-                DLog(@"Unexpected background style %@", @(backgroundStyle));
-                break;
-        }
-        return;
-    }
     switch (backgroundStyle) {
-        case NSBackgroundStyleLight:
-            self.textColor = [NSColor blackColor];
+        case NSBackgroundStyleNormal:
+            self.textColor = [NSColor labelColor];
             [self setAttributedTextColorsForKey:iTermRegularForegroundColor];
             break;
-        case NSBackgroundStyleDark:
+        case NSBackgroundStyleEmphasized:
             [self setAttributedTextColorsForKey:iTermSelectedActiveForegroundColor];
-            self.textColor = [NSColor whiteColor];
+            self.textColor = [NSColor labelColor];
             break;
 
         case NSBackgroundStyleRaised:
@@ -619,7 +602,7 @@ const CGFloat kDefaultTagsWidth = 80;
 
 - (CGFloat)extraHeightWithTags:(BOOL)hasTags {
     if (hasTags) {
-        return 4;
+        return 6;
     } else {
         return 2;
     }
@@ -644,47 +627,19 @@ const CGFloat kDefaultTagsWidth = 80;
 }
 
 - (NSColor *)regularTextColor {
-    if (@available(macOS 10.14, *)) {
-        return [NSColor labelColor];
-    }
-    if ([self lightTheme]) {
-        return [NSColor blackColor];
-    } else {
-        return [NSColor whiteColor];
-    }
+    return [NSColor labelColor];
 }
 
 - (NSColor *)textColorWhenInactiveAndSelected {
-    if (@available(macOS 10.14, *)) {
-        return [NSColor unemphasizedSelectedTextColor];
-    }
-    if ([self lightTheme]) {
-        return [NSColor blackColor];
-    } else {
-        return [NSColor whiteColor];
-    }
+    return [NSColor unemphasizedSelectedTextColor];
 }
 
 - (NSColor *)selectedActiveTagColor {
-    if (@available(macOS 10.14, *)) {
-        return [NSColor selectedMenuItemTextColor];
-    }
-    if ([self lightTheme]) {
-        return [NSColor whiteColor];
-    } else {
-        return [NSColor blackColor];
-    }
+    return [NSColor selectedMenuItemTextColor];
 }
 
 - (NSColor *)selectedActiveTextColor {
-    if (@available(macOS 10.14, *)) {
-        return [NSColor selectedMenuItemTextColor];
-    }
-    if ([self lightTheme]) {
-        return [NSColor whiteColor];
-    } else {
-        return [NSColor blackColor];
-    }
+    return [NSColor selectedMenuItemTextColor];
 }
 
 - (NSColor *)regularTagColor {
@@ -775,42 +730,15 @@ const CGFloat kDefaultTagsWidth = 80;
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
     static NSString *const identifier = @"ProfileListViewIdentifier";
-    NSTableCellView *result = [tableView makeViewWithIdentifier:identifier owner:self];
-    if (result == nil) {
-        // Apple couldn't be bothered to document it but this method is kind of
-        // supposed to return an NSTableCellView. Its backgroundStyle gets
-        // changed when a row is selected/deselected. It's supposed to pass that
-        // on to its textField, which of course you have to manually create like
-        // an animal unless you use IB for this (which is silly).
-        result = [[[NSTableCellView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)] autorelease];
-        result.textField = [iTermProfileListViewTextField it_textFieldForTableViewWithIdentifier:identifier];
-        result.textField.frame = result.bounds;
-        result.textField.autoresizingMask = (NSViewWidthSizable |
-                                             NSViewHeightSizable);
-        result.autoresizesSubviews = YES;
-        [result addSubview:result.textField];
-    }
     BOOL multiline = NO;
     id value = [self stringOrAttributedStringForColumn:tableColumn row:row multiline:&multiline];
-    // Single line mode breaks vertical alignment
-    result.textField.usesSingleLineMode = NO;
+    NSTableCellView *result;
     if ([value isKindOfClass:[NSAttributedString class]]) {
-        result.textField.attributedStringValue = value;
+        result = [tableView newTableCellViewWithTextFieldUsingIdentifier:identifier attributedString:value];
         result.textField.toolTip = [value string];
     } else {
-        result.textField.stringValue = value;
+        result = [tableView newTableCellViewWithTextFieldUsingIdentifier:identifier font:_font string:value];
         result.textField.toolTip = value;
-    }
-    iTermProfileListViewTextField *textField = (id)result.textField;
-    NSTableRowView *rowView = [tableView rowViewAtRow:row makeIfNecessary:NO];
-    if (rowView) {
-        // An explicit call to rowViewAtRow:makeIfNecessary:YES as in
-        // -selectRowIndex: is needed for this to be initialized correctly
-        // if the background style is not default. If there's no rowView at
-        // the time this is called, the backgroundStyle never gets initialized.
-        // I think I'm going to become a farmer.
-        result.backgroundStyle = [rowView interiorBackgroundStyle];
-        textField.backgroundStyle = [rowView interiorBackgroundStyle];
     }
     return result;
 }

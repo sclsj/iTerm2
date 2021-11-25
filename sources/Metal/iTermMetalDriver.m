@@ -1629,9 +1629,9 @@ legacyScrollbarWidth:(unsigned int)legacyScrollbarWidth {
              frameData:frameData
                   stat:iTermMetalFrameDataStatPqEnqueueBadge];
 
-    [self drawRenderer:_broadcastStripesRenderer
-             frameData:frameData
-                  stat:iTermMetalFrameDataStatPqEnqueueBroadcastStripes];
+    [self drawCellRenderer:_broadcastStripesRenderer
+                 frameData:frameData
+                      stat:iTermMetalFrameDataStatPqEnqueueBroadcastStripes];
 
     [self drawCellRenderer:_cursorGuideRenderer
                  frameData:frameData
@@ -1722,10 +1722,8 @@ legacyScrollbarWidth:(unsigned int)legacyScrollbarWidth {
     DLog(@"Finish drawing frameData %@", frameData);
     BOOL shouldCopyToDrawable = YES;
 
-    if (@available(macOS 10.14, *)) {
-        if (iTermTextIsMonochromeOnMojave()) {
-            shouldCopyToDrawable = NO;
-        }
+    if (iTermTextIsMonochromeOnMojave()) {
+        shouldCopyToDrawable = NO;
     }
     
 #if ENABLE_DEFER_CURRENT_DRAWABLE

@@ -102,6 +102,7 @@
 
     entry = [[iTermCachedImage alloc] initWithPath:path image:&image];
     if (!image) {
+        DLog(@"Failed to load image from %@", path);
         return nil;
     }
     [_cache setObject:entry forKey:path];
@@ -149,6 +150,16 @@
         _image = image;
     }
     return self;
+}
+
+- (NSString *)description {
+    return [NSString stringWithFormat:@"<%@: %p reps=%@ image=%@ tilingImages=%@ cgimage=%@>",
+            NSStringFromClass([self class]),
+            self,
+            _reps,
+            _image,
+            _tilingImages,
+            _cgimage];
 }
 
 - (CGImageRef)cgimage {

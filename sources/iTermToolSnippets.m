@@ -8,6 +8,7 @@
 #import "iTermToolSnippets.h"
 
 #import "DebugLogging.h"
+#import "iTerm2SharedARC-Swift.h"
 #import "iTermActionsModel.h"
 #import "iTermEditSnippetWindowController.h"
 #import "iTermSnippetsModel.h"
@@ -26,6 +27,11 @@ static const CGFloat kButtonHeight = 23;
 static const CGFloat kMargin = 4;
 static NSString *const iTermToolSnippetsPasteboardType = @"iTermToolSnippetsPasteboardType";
 
+typedef NS_ENUM(NSUInteger, iTermToolSnippetsAction) {
+    iTermToolSnippetsActionSend,
+    iTermToolSnippetsActionAdvancedPaste,
+    iTermToolSnippetsActionComposer
+};
 
 @interface iTermToolSnippets() <NSDraggingDestination, NSTableViewDataSource, NSTableViewDelegate>
 @end
@@ -93,54 +99,14 @@ static NSButton *iTermToolSnippetsNewButton(NSString *imageName, NSString *title
         [self addSubview:_removeButton];
         [self addSubview:_editButton];
 
-        _scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, frame.size.width, frame.size.height - kButtonHeight - kMargin)];
-        _scrollView.hasVerticalScroller = YES;
-        _scrollView.hasHorizontalScroller = NO;
-        if (@available(macOS 10.16, *)) {
-            _scrollView.borderType = NSLineBorder;
-            _scrollView.scrollerStyle = NSScrollerStyleOverlay;
-        } else {
-            _scrollView.borderType = NSBezelBorder;
-        }
-        NSSize contentSize = [_scrollView contentSize];
-        [_scrollView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-        _scrollView.drawsBackground = NO;
-
-        _tableView = [[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, contentSize.width, contentSize.height)];
-#ifdef MAC_OS_X_VERSION_10_16
-        if (@available(macOS 10.16, *)) {
-            _tableView.style = NSTableViewStyleInset;
-        }
-#endif
-        NSTableColumn *valueColumn = [[NSTableColumn alloc] initWithIdentifier:@"value"];
-        [valueColumn setEditable:NO];
-        [_tableView addTableColumn:valueColumn];
-
-        _tableView.columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
-        _tableView.headerView = nil;
-        _tableView.dataSource = self;
-        _tableView.delegate = self;
-        _tableView.intercellSpacing = NSMakeSize(_tableView.intercellSpacing.width, 0);
-        _tableView.rowHeight = 15;
+        _scrollView = [NSScrollView scrollViewWithTableViewForToolbeltWithContainer: self
+                                                                             insets:NSEdgeInsetsMake(0, 0, 0, kButtonHeight + kMargin)];
+        _tableView = _scrollView.documentView;
         _tableView.allowsMultipleSelection = YES;
         [_tableView registerForDraggedTypes:@[ iTermToolSnippetsPasteboardType ]];
-
-        [_tableView setDoubleAction:@selector(doubleClickOnTableView:)];
-        [_tableView setAutoresizingMask:NSViewWidthSizable];
-
-        [_scrollView setDocumentView:_tableView];
-        [self addSubview:_scrollView];
-
-        [_tableView sizeToFit];
-        [_tableView sizeLastColumnToFit];
-
-        [_tableView performSelector:@selector(scrollToEndOfDocument:) withObject:nil afterDelay:0];
+        _tableView.doubleAction = @selector(doubleClickOnTableView:);
         _snippets = [[[iTermSnippetsModel sharedInstance] snippets] copy];
         [_tableView reloadData];
-        if (@available(macOS 10.14, *)) {
-            _tableView.backgroundColor = [NSColor clearColor];
-        }
-
         __weak __typeof(self) weakSelf = self;
         [iTermSnippetsDidChangeNotification subscribe:self
                                                 block:^(iTermSnippetsDidChangeNotification * _Nonnull notification) {
@@ -216,16 +182,30 @@ static NSButton *iTermToolSnippetsNewButton(NSString *imageName, NSString *title
     return !!([[NSApp currentEvent] modifierFlags] & NSEventModifierFlagOption);
 }
 
+- (BOOL)shiftPressed {
+    return !!([[NSApp currentEvent] modifierFlags] & NSEventModifierFlagShift);
+}
+
+- (iTermToolSnippetsAction)preferredAction {
+    if ([self optionPressed]) {
+        return iTermToolSnippetsActionAdvancedPaste;
+    }
+    if ([self shiftPressed]) {
+        return iTermToolSnippetsActionComposer;
+    }
+    return iTermToolSnippetsActionSend;
+}
+
 - (void)doubleClickOnTableView:(id)sender {
-    [self applySelectedSnippets:[self optionPressed]];
+    [self applySelectedSnippets:[self preferredAction]];
 }
 
 - (void)apply:(id)sender {
-    [self applySelectedSnippets:[self optionPressed]];
+    [self applySelectedSnippets:[self preferredAction]];
 }
 
 - (void)openInAdvancedPaste:(id)sender {
-    [self applySelectedSnippets:YES];
+    [self applySelectedSnippets:[self shiftPressed] ? iTermToolSnippetsActionComposer : iTermToolSnippetsActionAdvancedPaste];
 }
 
 - (void)add:(id)sender {
@@ -312,21 +292,29 @@ static NSButton *iTermToolSnippetsNewButton(NSString *imageName, NSString *title
     }
 }
 
-- (void)applySelectedSnippets:(BOOL)sendToAdvancedPaste {
+- (void)applySelectedSnippets:(iTermToolSnippetsAction)action {
     DLog(@"%@", [NSThread callStackSymbols]);
     for (iTermSnippet *snippet in [self selectedSnippets]) {
         DLog(@"Create action to send snippet %@", snippet);
         iTermToolWrapper *wrapper = self.toolWrapper;
-        if (sendToAdvancedPaste) {
-            [wrapper.delegate.delegate toolbeltOpenAdvancedPasteWithString:snippet.value
-                                                                  escaping:snippet.escaping];
-        } else {
-            iTermAction *action = [[iTermAction alloc] initWithTitle:@"Send Snippet"
-                                                              action:KEY_ACTION_SEND_SNIPPET
-                                                           parameter:snippet.actionKey
-                                                            escaping:snippet.escaping
-                                                             version:snippet.version];
-            [wrapper.delegate.delegate toolbeltApplyActionToCurrentSession:action];
+        switch (action) {
+            case iTermToolSnippetsActionSend: {
+                iTermAction *action = [[iTermAction alloc] initWithTitle:@"Send Snippet"
+                                                                  action:KEY_ACTION_SEND_SNIPPET
+                                                               parameter:snippet.actionKey
+                                                                escaping:snippet.escaping
+                                                                 version:snippet.version];
+                [wrapper.delegate.delegate toolbeltApplyActionToCurrentSession:action];
+                break;
+            }
+            case iTermToolSnippetsActionAdvancedPaste:
+                [wrapper.delegate.delegate toolbeltOpenAdvancedPasteWithString:snippet.value
+                                                                      escaping:snippet.escaping];
+                break;
+            case iTermToolSnippetsActionComposer:
+                [wrapper.delegate.delegate toolbeltOpenComposerWithString:snippet.value
+                                                                 escaping:snippet.escaping];
+                break;
         }
     }
 }
@@ -385,43 +373,23 @@ static NSButton *iTermToolSnippetsNewButton(NSString *imageName, NSString *title
 
 #pragma mark - NSTableViewDelegate
 
-- (NSTableRowView *)tableView:(NSTableView *)tableView rowViewForRow:(NSInteger)row {
-    if (@available(macOS 10.16, *)) {
-        return [[iTermBigSurTableRowView alloc] initWithFrame:NSZeroRect];
+- (NSString *)stringForRow:(NSInteger)row {
+    iTermSnippet *snippet = _snippets[row];
+    if ([snippet titleEqualsValueUpToLength:40]) {
+        return [self valueStringForRow:row];
     }
-    return [[iTermCompetentTableRowView alloc] initWithFrame:NSZeroRect];
+    return [self combinedStringForRow:row];
 }
 
 - (NSView *)tableView:(NSTableView *)tableView
    viewForTableColumn:(NSTableColumn *)tableColumn
                   row:(NSInteger)row {
-    iTermSnippet *snippet = _snippets[row];
-    if ([snippet titleEqualsValueUpToLength:40]) {
-        static NSString *const identifier = @"ToolSnippetValue";
-        NSTextField *result = [tableView makeViewWithIdentifier:identifier owner:self];
-        if (result == nil) {
-            result = [NSTextField it_textFieldForTableViewWithIdentifier:identifier];
-        }
-
-        NSString *value = [self valueStringForRow:row];
-        result.stringValue = value;
-        result.font = [NSFont it_toolbeltFont];
-        result.lineBreakMode = NSLineBreakByTruncatingTail;
-        return result;
-    }
-
-    static NSString *const identifier = @"ToolSnippetCombined";
-    NSTextField *result = [tableView makeViewWithIdentifier:identifier owner:self];
-    if (result == nil) {
-        result = [NSTextField it_textFieldForTableViewWithIdentifier:identifier];
-    }
-
-    NSString *value = [self combinedStringForRow:row];
-    result.stringValue = value;
-    result.lineBreakMode = NSLineBreakByTruncatingTail;
-    return result;
+    NSTableCellView *cell = [tableView newTableCellViewWithTextFieldUsingIdentifier:@"iTermToolSnippets"
+                                                                               font:[NSFont it_toolbeltFont]
+                                                                             string:[self stringForRow:row]];
+    cell.textField.stringValue = [self stringForRow:row];
+    return cell;
 }
-
 
 - (void)tableViewSelectionDidChange:(NSNotification *)notification {
     [self updateEnabled];

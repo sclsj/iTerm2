@@ -31,6 +31,16 @@
     _saved = [command copy];
 }
 
+- (void)showOrAppendToDropdownWithString:(NSString *)string {
+    if (!_dropDownComposerViewIsVisible) {
+        _saved = [string copy];
+        [self showMinimalComposerInView:[self.delegate composerManagerContainerView:self]];
+    } else {
+        _minimalViewController.stringValue = [NSString stringWithFormat:@"%@\n%@",
+                                              _minimalViewController.stringValue, string];
+    }
+    [_minimalViewController makeFirstResponder];
+}
 - (void)showWithCommand:(NSString *)command {
     _saved = [command copy];
     if (_dropDownComposerViewIsVisible) {
@@ -111,6 +121,10 @@
     [component makeFirstResponder];
 }
 
+- (BOOL)minimalComposerRevealed {
+    return _minimalViewController != nil;
+}
+
 - (void)showMinimalComposerInView:(NSView *)superview {
     if (_minimalViewController) {
         _saved = _minimalViewController.stringValue;
@@ -176,6 +190,14 @@
     }
     _saved = nil;
     [self.delegate composerManager:self sendCommand:[command stringByAppendingString:@"\n"]];
+}
+
+- (void)minimalComposer:(iTermMinimalComposerViewController *)composer
+    sendToAdvancedPaste:(NSString *)content {
+    [self dismissMinimalView];
+    _saved = nil;
+    [self.delegate composerManager:self
+               sendToAdvancedPaste:[content stringByAppendingString:@"\n"]];
 }
 
 - (void)dismissMinimalView {
