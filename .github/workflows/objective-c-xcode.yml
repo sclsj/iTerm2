@@ -1,4 +1,4 @@
-name: CI
+name: objective-c-xcode
 
 on:
   push:
@@ -8,8 +8,7 @@ on:
 
 jobs:
   build:
-    # FIXME: This builds with macOS 10.15. Move this to the 11.0 builders when possible. (See: https://github.com/actions/virtual-environments/issues/2486)
-    runs-on:  macos-latest
+    runs-on:  macos-11
     steps:
       - uses: actions/checkout@v2
 
