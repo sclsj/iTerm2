@@ -180,8 +180,6 @@ static BOOL hasBecomeActive = NO;
     NSMenuItem *downloadsMenu_;
     NSMenuItem *uploadsMenu_;
     IBOutlet NSMenuItem *selectTab;
-    IBOutlet NSMenuItem *closeTab;
-    IBOutlet NSMenuItem *closeWindow;
     IBOutlet NSMenuItem *irPrev;
     IBOutlet NSMenuItem *windowArrangements_;
     IBOutlet NSMenuItem *windowArrangementsAsTabs_;
@@ -272,11 +270,6 @@ static BOOL hasBecomeActive = NO;
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(reloadSessionMenus:)
                                                      name:iTermSessionBecameKey
-                                                   object:nil];
-
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(nonTerminalWindowBecameKey:)
-                                                     name:kNonTerminalWindowBecameKeyNotification
                                                    object:nil];
 
         [[NSNotificationCenter defaultCenter] addObserver:self
@@ -446,6 +439,10 @@ static BOOL hasBecomeActive = NO;
         if ([realResponder respondsToSelector:@selector(validateMenuItem:)]) {
             return [realResponder validateMenuItem:menuItem];
         }
+        return YES;
+    } else if (menuItem.action == @selector(toggleDisableTransparencyForActiveWindow:)) {
+        const BOOL value = [iTermPreferences boolForKey:kPreferenceKeyDisableTransparencyForKeyWindow];
+        menuItem.state = value ? NSControlStateValueOn : NSControlStateValueOff;
         return YES;
     } else {
         return YES;
@@ -874,10 +871,11 @@ static BOOL hasBecomeActive = NO;
         // Don't want to do this for applescript testing so we have a blank slate.
         return NO;
     }
-    DLog(@"finishedLaunching=%@ openArrangementAtStartup=%@ openNoWindowsAtStartup=%@",
+    DLog(@"finishedLaunching=%@ openArrangementAtStartup=%@ openNoWindowsAtStartup=%@ alwaysOpenWindowAtStartup=%@",
          @(finishedLaunching_),
          @([iTermPreferences boolForKey:kPreferenceKeyOpenArrangementAtStartup]),
-         @([iTermPreferences boolForKey:kPreferenceKeyOpenNoWindowsAtStartup]));
+         @([iTermPreferences boolForKey:kPreferenceKeyOpenNoWindowsAtStartup]),
+         @([iTermPreferences boolForKey:kPreferenceKeyAlwaysOpenWindowAtStartup]));
 
     if (![iTermAdvancedSettingsModel openUntitledFile]) {
         DLog(@"Opening untitled files is disabled");
@@ -973,7 +971,7 @@ static BOOL hasBecomeActive = NO;
         // We have to create the hotkey window now because we need to attach to servers before
         // launch finishes; otherwise any running hotkey window jobs will be treated as orphans.
         const NSInteger count = [[iTermHotKeyController sharedInstance] createHiddenWindowsFromRestorableStates:hotkeyWindowsStates];
-        if (count > 0) {
+        if (count > 0 && ![iTermPreferences boolForKey:kPreferenceKeyAlwaysOpenWindowAtStartup]) {
             [_untitledWindowStateMachine didRestoreSomeWindows];
         }
     }
@@ -1390,19 +1388,6 @@ void TurnOnDebugLoggingAutomatically(void) {
     }
 
     [self buildSessionSubmenu: aNotification];
-    // reset the close tab/window shortcuts
-    [closeTab setAction:@selector(closeCurrentTab:)];
-    [closeTab setTarget:frontTerminal];
-    [closeTab setKeyEquivalent:@"w"];
-    [closeWindow setKeyEquivalent:@"W"];
-    [closeWindow setKeyEquivalentModifierMask: NSEventModifierFlagCommand];
-}
-
-- (void)nonTerminalWindowBecameKey:(NSNotification *)aNotification {
-    [closeTab setAction:nil];
-    [closeTab setKeyEquivalent:@""];
-    [closeWindow setKeyEquivalent:@"w"];
-    [closeWindow setKeyEquivalentModifierMask:NSEventModifierFlagCommand];
 }
 
 - (void)updateAddressBookMenu:(NSNotification *)aNotification {
@@ -1505,18 +1490,10 @@ void TurnOnDebugLoggingAutomatically(void) {
     if ([iTermPreferences boolForKey:kPreferenceKeyOpenArrangementAtStartup]) {
         // Open the saved arrangement at startup.
         [[iTermController sharedInstance] loadWindowArrangementWithName:[WindowArrangements defaultArrangementName]];
-    } else if (!ranAutoLaunchScripts &&
-               [iTermAdvancedSettingsModel openNewWindowAtStartup] &&
-               ![iTermPreferences boolForKey:kPreferenceKeyOpenNoWindowsAtStartup] &&
-               [[[iTermController sharedInstance] terminals] count] == 0 &&
-               ![self isAppleScriptTestApp] &&
-               [[[iTermHotKeyController sharedInstance] profileHotKeys] count] == 0 &&
-               [[[iTermBuriedSessions sharedInstance] buriedSessions] count] == 0 &&
-               ![[NSApplication sharedApplication] isRunningUnitTests]) {
-        // Over time logic has shifted into -applicationOpenUntitledFile:, and for most users I
-        // beleive this is a no-op. However, it is complex enough that there might be a baby in this
-        // bathwater so I'm disinclined to remove it until I understand when it would be used. For
-        // now I will leave it in to avoid adding risk to 3.4.0.
+    } else if ([self shouldOpenUntitledFileAfterRunningAutoLaunchScripts:ranAutoLaunchScripts]) {
+        // This opens the initial untitled window when needed. -applicationOpenUntitledFile is
+        // called for both the initial window (unreliably) and also when clicking on the dock with
+        // no windows.
         [_untitledWindowStateMachine maybeOpenUntitledFile];
     }
     [_untitledWindowStateMachine didFinishInitialization];
@@ -1525,6 +1502,42 @@ void TurnOnDebugLoggingAutomatically(void) {
     [PTYSession removeAllRegisteredSessions];
 
     [iTermLaunchExperienceController performStartupActivities];
+}
+
+- (BOOL)shouldOpenUntitledFileAfterRunningAutoLaunchScripts:(BOOL)ranAutoLaunchScripts {
+    if ([self isAppleScriptTestApp]) {
+        return NO;
+    }
+    if ([[NSApplication sharedApplication] isRunningUnitTests]) {
+        return NO;
+    }
+    if (![iTermAdvancedSettingsModel openNewWindowAtStartup]) {
+        return NO;
+    }
+
+    if ([iTermPreferences boolForKey:kPreferenceKeyOpenArrangementAtStartup]) {
+        return NO;
+    }
+    if ([iTermPreferences boolForKey:kPreferenceKeyOpenNoWindowsAtStartup]) {
+        return NO;
+    }
+    if ([[[iTermController sharedInstance] terminals] count] > 0) {
+        return NO;
+    }
+    const BOOL alwaysOpen = [iTermPreferences boolForKey:kPreferenceKeyAlwaysOpenWindowAtStartup];
+    if (alwaysOpen) {
+        return YES;
+    }
+    if (ranAutoLaunchScripts) {
+        return NO;
+    }
+    if ([[[iTermHotKeyController sharedInstance] profileHotKeys] count] > 0) {
+        return NO;
+    }
+    if ([[[iTermBuriedSessions sharedInstance] buriedSessions] count] > 0) {
+        return NO;
+    }
+    return YES;
 }
 
 - (void)createVersionFile {
@@ -1640,6 +1653,7 @@ void TurnOnDebugLoggingAutomatically(void) {
     bookmarksMenu = [[[NSMenu alloc] init] autorelease];
 
     [[iTermController sharedInstance] addBookmarksToMenu:bookmarksMenu
+                                               supermenu:superMenu
                                             withSelector:selector
                                          openAllSelector:openAllSelector
                                               startingAt:0];
@@ -2018,6 +2032,12 @@ void TurnOnDebugLoggingAutomatically(void) {
 - (IBAction)toggleUseTransparency:(id)sender {
     [[[iTermController sharedInstance] currentTerminal] toggleUseTransparency:sender];
     [self updateUseTransparencyMenuItem];
+}
+
+- (IBAction)toggleDisableTransparencyForActiveWindow:(id)sender {
+    const BOOL oldValue = [iTermPreferences boolForKey:kPreferenceKeyDisableTransparencyForKeyWindow];
+    [iTermPreferences setBool:!oldValue forKey:kPreferenceKeyDisableTransparencyForKeyWindow];
+    [[[NSApp keyWindow] contentView] setNeedsDisplay:YES];
 }
 
 - (IBAction)toggleSecureInput:(id)sender {
@@ -2705,7 +2725,7 @@ void TurnOnDebugLoggingAutomatically(void) {
         // We have to create the hotkey window now because we need to attach to servers before
         // launch finishes; otherwise any running hotkey window jobs will be treated as orphans.
         const BOOL createdAny = [[iTermHotKeyController sharedInstance] createHiddenWindowsByDecoding:hotkeyWindowsStates];
-        if (createdAny) {
+        if (createdAny && ![iTermPreferences boolForKey:kPreferenceKeyAlwaysOpenWindowAtStartup]) {
             [_untitledWindowStateMachine didRestoreSomeWindows];
         }
     }

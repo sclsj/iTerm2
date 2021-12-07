@@ -1531,6 +1531,14 @@
                             visible:gDebugLogging];
     [_indicatorsHelper setIndicator:kiTermIndicatorFilter
                             visible:[_delegate textViewIsFiltered]];
+
+    const BOOL secureByUser = [[iTermSecureKeyboardEntryController sharedInstance] enabledByUserDefault];
+    const BOOL secure = [[iTermSecureKeyboardEntryController sharedInstance] isEnabled];
+    [_indicatorsHelper setIndicator:kiTermIndicatorSecureKeyboardEntry_User
+                            visible:secure && secureByUser];
+    [_indicatorsHelper setIndicator:kiTermIndicatorSecureKeyboardEntry_Forced
+                            visible:secure && !secureByUser];
+
     NSRect rect = self.visibleRect;
     rect.size.width -= rightMargin;
     return rect;
@@ -1857,6 +1865,9 @@
 }
 
 - (double)transparencyAlpha {
+    if (self.window.isKeyWindow && [iTermPreferences boolForKey:kPreferenceKeyDisableTransparencyForKeyWindow]) {
+        return 1;
+    }
     return [self useTransparency] ? 1.0 - _transparency : 1.0;
 }
 
@@ -3334,6 +3345,12 @@
 
 - (void)selectPreviousPaneWithEvent:(NSEvent *)event {
     [_delegate textViewSelectPreviousPane];
+}
+
+- (void)selectMenuItemWithIdentifier:(NSString *)identifier
+                               title:(NSString *)title
+                               event:(NSEvent *)event {
+    [_delegate textViewSelectMenuItemWithIdentifier:identifier title:title];
 }
 
 - (void)advancedPasteWithConfiguration:(NSString *)configuration

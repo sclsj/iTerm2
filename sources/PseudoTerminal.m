@@ -178,6 +178,9 @@ static NSString *const TERMINAL_ARRANGEMENT_USE_TRANSPARENCY = @"Use Transparenc
 static NSString *const TERMINAL_ARRANGEMENT_TOOLBELT_PROPORTIONS = @"Toolbelt Proportions";
 static NSString *const TERMINAL_ARRANGEMENT_TITLE_OVERRIDE = @"Title Override";
 static NSString *const TERMINAL_ARRANGEMENT_TOOLBELT = @"Toolbelt";
+
+// This is used to adjust the window's size to preserve rows x cols when the scroller style changes.
+// If the window was maximized to the screen's visible frame, it will be unset to disable this behavior.
 static NSString *const TERMINAL_ARRANGEMENT_SCROLLER_WIDTH = @"Scroller Width";
 
 // Only present in arrangements created by the window restoration system, not (for example) saved arrangements in the UI.
@@ -2335,7 +2338,8 @@ ITERM_WEAKLY_REFERENCEABLE
 
     if ([iTermPreferences boolForKey:kPreferenceKeyShowWindowNumber]) {
         NSString *tmuxId = @"";
-        if ([[self currentSession] isTmuxClient]) {
+        if ([[self currentSession] isTmuxClient] &&
+            [iTermAdvancedSettingsModel tmuxIncludeClientNameInWindowTitle]) {
             NSString *clientName = [[[self currentSession] tmuxController] clientName];
             if (clientName) {
                 tmuxId = [NSString stringWithFormat:@" [%@]", clientName];
@@ -3169,6 +3173,8 @@ ITERM_WEAKLY_REFERENCEABLE
             case WINDOW_TYPE_COMPACT:
                 DLog(@"Needs width adjustment and sanitization.");
                 frame = [PseudoTerminal sanitizedWindowFrame:[self rectByAdjustingWidth:rect]];
+                DLog(@"Set width adjustment to 0 for %@", self);
+                _widthAdjustment = 0;
                 break;
 
             case WINDOW_TYPE_LEFT:
@@ -3382,10 +3388,23 @@ ITERM_WEAKLY_REFERENCEABLE
     }
 
     const CGFloat scrollerWidth = iTermScrollbarWidth();
-    result[TERMINAL_ARRANGEMENT_SCROLLER_WIDTH] = @(scrollerWidth);
-    DLog(@"Save scroller width of %@", @(scrollerWidth));
+    if (![self isMaximized]) {
+        result[TERMINAL_ARRANGEMENT_SCROLLER_WIDTH] = @(scrollerWidth);
+        DLog(@"Save scroller width of %@", @(scrollerWidth));
+    } else {
+        DLog(@"Window is maximized so don't save scroller width.");
+    }
 
     return YES;
+}
+
+- (BOOL)isMaximized {
+    if (self.window.screen == nil) {
+        return NO;
+    }
+    return iTermApproximatelyEqualRects(self.window.frame,
+                                        self.window.screen.visibleFrame,
+                                        0.5);
 }
 
 - (NSDictionary*)arrangement {
@@ -3687,6 +3706,7 @@ ITERM_WEAKLY_REFERENCEABLE
         [[aSession view] setBackgroundDimmed:NO];
         [aSession setFocused:aSession == [self currentSession]];
         [aSession.view setNeedsDisplay:YES];
+        [aSession useTransparencyDidChange];
     }
     // Some users report that the first responder isn't always set properly. Let's try to fix that.
     // This attempt (4/20/13) is to fix bug 2431.
@@ -3870,7 +3890,11 @@ ITERM_WEAKLY_REFERENCEABLE
     for (PseudoTerminal *term in [[iTermController sharedInstance] terminals]) {
         if (term.lionFullScreen && term.window.isOnActiveSpace) {
             if (term.window.screen == screen) {
-                return screen.frame;
+                // There's a Lion fullscreen window on this display. The window can go at the very
+                // top of the screen. If there's a notch, it must be below it. Either way, the
+                // usable frame equals that of my window. Note that screen.visibleFrame includes
+                // a 5-point margin that the top which is actually not visible! ❤️
+                return term.window.frame;
             } else {
                 otherScreenHasLionFullscreenTerminalWindow = YES;
             }
@@ -4088,6 +4112,7 @@ ITERM_WEAKLY_REFERENCEABLE
             [[aSession textview] endFindCursor];
         }
         [[aSession textview] removeUnderline];
+        [aSession useTransparencyDidChange];
         [aSession.view setNeedsDisplay:YES];
     }
 
@@ -5651,6 +5676,7 @@ ITERM_WEAKLY_REFERENCEABLE
     NSMenu *aMenu = [[[NSMenu alloc] init] autorelease];
 
     [[iTermController sharedInstance] addBookmarksToMenu:aMenu
+                                               supermenu:theMenu
                                             withSelector:@selector(newSessionInWindowAtIndex:)
                                          openAllSelector:@selector(newSessionsInNewWindow:)
                                               startingAt:0];
@@ -5659,6 +5685,7 @@ ITERM_WEAKLY_REFERENCEABLE
 
     aMenu = [[[NSMenu alloc] init] autorelease];
     [[iTermController sharedInstance] addBookmarksToMenu:aMenu
+                                               supermenu:theMenu
                                             withSelector:@selector(newSessionInTabAtIndex:)
                                          openAllSelector:@selector(newSessionsInWindow:)
                                               startingAt:0];
@@ -8741,6 +8768,22 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
     }
 }
 
+static BOOL iTermApproximatelyEqualRects(NSRect lhs, NSRect rhs, double epsilon) {
+    if (fabs(NSMinX(lhs) - NSMinX(rhs)) > epsilon) {
+        return NO;
+    }
+    if (fabs(NSMaxX(lhs) - NSMaxX(rhs)) > epsilon) {
+        return NO;
+    }
+    if (fabs(NSMinY(lhs) - NSMinY(rhs)) > epsilon) {
+        return NO;
+    }
+    if (fabs(NSMaxY(lhs) - NSMaxY(rhs)) > epsilon) {
+        return NO;
+    }
+    return YES;
+}
+
 - (void)scrollerStyleDidChange:(NSNotification *)notification {
     DLog(@"scrollerStyleDidChange %@", @([NSScroller preferredScrollerStyle]));
 
@@ -8756,7 +8799,7 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
         DLog(@"screen visibleFrame is %@, window frame is %@",
              NSStringFromRect(self.window.screen.visibleFrame),
              NSStringFromRect(self.window.frame));
-        if (!NSEqualRects(self.window.screen.visibleFrame, self.window.frame)) {
+        if (!iTermApproximatelyEqualRects(self.window.screen.visibleFrame, self.window.frame, 0.5)) {
             DLog(@"Fit window to idealized tabs preserving height");
             [self fitWindowToIdealizedTabsPreservingHeight:YES];
         } else {
@@ -9895,6 +9938,8 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
         [item action] == @selector(newTmuxTab:) ||
         [item action] == @selector(forceDetachTmux:)) {
         return [[iTermController sharedInstance] haveTmuxConnection];
+    } else if (item.action == @selector(closeCurrentTab:)) {
+        return YES;
     } else if (item.action == @selector(toggleTmuxPausePane:)) {
         const BOOL ok = (self.currentSession.isTmuxClient &&
                          self.currentSession.tmuxController.gateway.pauseModeEnabled);
